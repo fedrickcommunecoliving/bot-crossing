@@ -71,8 +71,38 @@ let unlockedThisSession = false
  * passcode still stands behind it. Two curtains, not one instead of the other.
  */
 let shipTaps = 0
-let revealedThisSession = false
 const SHIP_TAPS_TO_REVEAL = 5
+
+/**
+ * The reveal survives a page reload; the unlock does not.
+ *
+ * A reload is not always something you asked for — the dev server restarts, a crash, a stray
+ * refresh — and each one used to send you back to clicking the ship five times before you could
+ * even be asked for the passcode. Two gates, one of which you have to re-do because the browser
+ * blinked, is not a secret handshake, it is a loop.
+ *
+ * `sessionStorage`, so it dies with the tab: closing the window still puts the row away, which is
+ * the behaviour the handshake is for. The passcode is deliberately NOT kept here — that one is
+ * meant to be asked again, and it is the gate that actually guards the names.
+ */
+const REVEAL_KEY = 'botcrossing.revealed'
+const readReveal = () => {
+  try {
+    return sessionStorage.getItem(REVEAL_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+let revealedThisSession = readReveal()
+function setRevealed(on) {
+  revealedThisSession = on
+  try {
+    if (on) sessionStorage.setItem(REVEAL_KEY, '1')
+    else sessionStorage.removeItem(REVEAL_KEY)
+  } catch {
+    /* private window, or storage refused — the reveal simply does not outlive the page */
+  }
+}
 const hoverGround = new THREE.Vector3()
 
 // ── actions the HUD can trigger ────────────────────────────────────────────────────────
@@ -678,7 +708,7 @@ engine.canvas.addEventListener('pointerup', (e) => {
         // The same handshake both ways. Hidden is the resting state, so putting it back has to
         // be as easy as bringing it out — otherwise the row stays on screen all afternoon
         // because closing it again meant reloading the page.
-        revealedThisSession = !revealedThisSession
+        setRevealed(!revealedThisSession)
         shipTaps = 0
         // Whatever was open goes with it: revealing again should not resume a half-entered
         // passcode or an already-open list.
