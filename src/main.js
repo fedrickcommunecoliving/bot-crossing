@@ -65,6 +65,14 @@ let statusCursor = 0
 let pendingSave = 0
 /** Whether the passcode has been entered since this page loaded. Never persisted. */
 let unlockedThisSession = false
+/**
+ * The off-the-map row is not drawn at all while a passcode is set, so nothing on screen says
+ * there is anything to find. Five clicks on the ship brings the row back for this page — and the
+ * passcode still stands behind it. Two curtains, not one instead of the other.
+ */
+let shipTaps = 0
+let revealedThisSession = false
+const SHIP_TAPS_TO_REVEAL = 5
 const hoverGround = new THREE.Vector3()
 
 // ── actions the HUD can trigger ────────────────────────────────────────────────────────
@@ -212,7 +220,13 @@ const actions = {
    * Unlocking lasts for this page, not for ever: reload and the curtain is closed again. That is
    * the behaviour someone who locked a list wants, and it costs one entry a session.
    */
-  lockState: () => ({ locked: isLocked(state.lock), open: unlockedThisSession, supported: canLock() }),
+  lockState: () => ({
+    locked: isLocked(state.lock),
+    open: unlockedThisSession,
+    supported: canLock(),
+    // While a passcode stands and the handshake has not been made, the row itself is not drawn.
+    revealed: revealedThisSession || !isLocked(state.lock),
+  }),
 
   setLock: async (passcode) => {
     if (!passcode) return { ok: false, error: 'Enter a passcode first' }
@@ -652,6 +666,28 @@ engine.canvas.addEventListener('pointerup', (e) => {
   if (agent) {
     select(agent.id, {})
     return
+  }
+  // The ship belongs to no repo, so a click on it has never done anything — which is what makes
+  // it the place to put the handshake. Counted only while a passcode is actually set and the row
+  // is still hidden; otherwise this is dead code and the ship stays inert.
+  if (colony.pickShip(p.x, p.y)) {
+    const gate = actions.lockState()
+    if (gate.locked) {
+      shipTaps += 1
+      if (shipTaps >= SHIP_TAPS_TO_REVEAL) {
+        // The same handshake both ways. Hidden is the resting state, so putting it back has to
+        // be as easy as bringing it out — otherwise the row stays on screen all afternoon
+        // because closing it again meant reloading the page.
+        revealedThisSession = !revealedThisSession
+        shipTaps = 0
+        // Whatever was open goes with it: revealing again should not resume a half-entered
+        // passcode or an already-open list.
+        unlockedThisSession = false
+        syncProject()
+        hud.toast(revealedThisSession ? 'Off-the-map list is showing — it still wants the passcode' : 'Off-the-map list put away')
+      }
+      return
+    }
   }
   // Nobody there: a zone's deck or its name plate opens that repo's sidebar instead, and
   // bare ground puts everything down.

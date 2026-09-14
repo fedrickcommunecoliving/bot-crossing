@@ -850,6 +850,21 @@ export class Colony {
     return this.astronauts.pick(this.camera, ndcX, ndcY, aspect)
   }
 
+  /**
+   * Whether the ship itself is under the cursor.
+   *
+   * The ship is the one thing on the map that belongs to no repo, which is what makes it a
+   * usable secret handshake: clicking it has never meant anything, so nothing is taken away by
+   * giving it a meaning. Its own raycaster rather than a shared one — this runs on a click, not
+   * per frame, and a second instance costs nothing at that rate.
+   */
+  pickShip(ndcX, ndcY) {
+    if (!this.ship?.group) return false
+    this._shipRay = this._shipRay || new THREE.Raycaster()
+    this._shipRay.setFromCamera({ x: ndcX, y: ndcY }, this.camera)
+    return this._shipRay.intersectObject(this.ship.group, true).length > 0
+  }
+
   agentFor(id) {
     return this.astronauts.byId.get(id)
   }

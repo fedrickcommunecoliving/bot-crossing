@@ -416,7 +416,7 @@ export class Hud {
       // withholding are never drawn — the unlock works and looks like it failed.
       `~${(() => {
         const g = this.actions.lockState?.() || {}
-        return `${g.locked ? 1 : 0}${g.open ? 1 : 0}`
+        return `${g.locked ? 1 : 0}${g.open ? 1 : 0}${g.revealed ? 1 : 0}`
       })()}`
     if (this._last.legend === signature) return
     this._last.legend = signature
@@ -442,7 +442,16 @@ export class Hud {
     // The hidden list is its own block at the foot of the sidebar: collapsed by default, because
     // the whole point of hiding a repo is not to look at it.
     const block = this.$('.hidden-block')
-    block.hidden = hidden.length === 0 && folded.length === 0
+    // While a passcode stands and the ship has not been clicked, the row is not on screen at
+    // all: no count, no padlock, nothing saying there is something to open. A row that announces
+    // "5 off the map · locked" tells a passer-by both that there is something and where it is.
+    const gateNow = this.actions.lockState?.() || {}
+    const concealed = gateNow.locked && !gateNow.revealed
+    block.hidden = concealed || (hidden.length === 0 && folded.length === 0)
+    if (concealed) {
+      this.hiddenOpen = false
+      this.$('.hidden-ask').hidden = true
+    }
     const hiddenWrap = this.$('.hidden-projects')
     hiddenWrap.innerHTML = ''
     // While the passcode stands, the names are not put in the page at all. `hidden` on the
