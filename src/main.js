@@ -244,9 +244,20 @@ const actions = {
   startTodo: (item) => {
     const name = selectedProject
     if (!name || !item) return
-    const pool = threads
-      .filter((t) => t.project === name && !t.archived)
-      .sort((a, b) => (b.lastActivityAt || 0) - (a.lastActivityAt || 0))
+    /**
+     * The newest thread, by whichever of its two clocks is later.
+     *
+     * Last activity alone is the right answer almost always — it follows you back to an older
+     * conversation when you return to one, and names lie about age: on this machine "Management +
+     * Booking 3" was created *before* a thread whose name sounds newer, so ordering by creation
+     * would hand a to-do to something untouched for days.
+     *
+     * But a session opened seconds ago and not yet typed into has no activity at all, and sorting
+     * on activity alone ranks the one you just made *last* — which is precisely the case anyone
+     * means by "it should go to the newest one". So creation counts too, and the later clock wins.
+     */
+    const freshness = (t) => Math.max(t.lastActivityAt || 0, t.createdAt || 0)
+    const pool = threads.filter((t) => t.project === name && !t.archived).sort((a, b) => freshness(b) - freshness(a))
     const newest = pool[0]
 
     const where = item.file ? `${item.file}${item.line ? ` line ${item.line}` : ''}` : 'TODO.md'
