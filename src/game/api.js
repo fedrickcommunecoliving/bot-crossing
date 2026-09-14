@@ -105,3 +105,9 @@ export const fetchThreadMessage = (thread) =>
  * backlog files are large and only one zone is ever on screen.
  */
 export const fetchProjectTodos = (folder) => post('/api/project-todos', { folder })
+
+/**
+ * Set, change or remove the passcode. `prevHash` proves the current passcode is known without
+ * sending it; `next` is the new {salt, hash, iterations}, or null to remove.
+ */
+export const saveLock = (prevHash, next) => post('/api/lock', { prevHash, next })

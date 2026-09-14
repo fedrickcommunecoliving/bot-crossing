@@ -15,12 +15,13 @@ import {
   saveState,
   openThread,
   newSession,
+  saveLock,
   fetchProjectTodos,
   fetchThreadMessage,
   revealFolder,
 } from './game/api.js'
 import { hideProject, hiddenCatalog, unhideProject } from './game/hidden-projects.js'
-import { canLock, checkLock, isLocked, makeLock } from './game/lock.js'
+import { canLock, checkLock, deriveFor, isLocked, makeLock } from './game/lock.js'
 
 /**
  * Boot and the outer game loop.
@@ -216,10 +217,23 @@ const actions = {
   setLock: async (passcode) => {
     if (!passcode) return { ok: false, error: 'Enter a passcode first' }
     if (!canLock()) return { ok: false, error: 'This browser cannot lock the list' }
-    state.lock = await makeLock(passcode)
-    unlockedThisSession = true
-    queueSave()
-    hud.toast('Off-the-map list locked — it asks for the passcode after a reload')
+    // The page's idea of whether a lock exists can be hours old, so ask the file, not itself.
+    // Without this a tab opened before the passcode was set offers to "choose" one and quietly
+    // replaces it.
+    const disk = await fetchState().catch(() => null)
+    if (disk && isLocked(disk.lock)) {
+      state.lock = disk.lock
+      return { ok: false, error: 'A passcode is already set — remove it first' }
+    }
+    const next = await makeLock(passcode)
+    const r = await saveLock(null, next).catch(() => ({ ok: false, error: 'Could not save the passcode' }))
+    if (!r.ok) return r
+    state.lock = next
+    // Sealed immediately. It said "locked" and then stayed open until the page was reloaded,
+    // which is the one thing a lock must never do.
+    unlockedThisSession = false
+    syncProject()
+    hud.toast('Off-the-map list locked')
     return { ok: true }
   },
 
@@ -227,9 +241,12 @@ const actions = {
   clearLock: async (passcode) => {
     if (!isLocked(state.lock)) return { ok: true }
     if (!(await checkLock(state.lock, passcode))) return { ok: false, error: 'That passcode is not right' }
+    const proof = await deriveFor(state.lock, passcode)
+    const r = await saveLock(proof, null).catch(() => ({ ok: false, error: 'Could not remove the passcode' }))
+    if (!r.ok) return r
     state.lock = null
     unlockedThisSession = true
-    queueSave()
+    syncProject()
     hud.toast('Passcode removed')
     return { ok: true }
   },

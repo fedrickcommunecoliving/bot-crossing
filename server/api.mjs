@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
+import { timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { readTodos } from './lib/todos.mjs'
 import { openInTerminal, schemeHasHandler, schemeOf } from './lib/xdg.mjs'
@@ -106,7 +107,8 @@ let writeQueue = Promise.resolve()
 let tmpSeq = 0
 const serialise = (fn) => (writeQueue = writeQueue.then(fn, fn))
 
-async function writeState(next) {
+async function writeState(next, lockOverride) {
+  const keepLock = lockOverride !== undefined ? lockOverride : (await readState()).lock
   const state = {
     version: STATE_VERSION,
     archived: asArray(next.archived),
@@ -115,7 +117,12 @@ async function writeState(next) {
     plots: asObject(next.plots),
     seen: asObject(next.seen),
     hiddenProjects: asArray(next.hiddenProjects).map(String).filter(Boolean),
-    lock: next.lock && typeof next.lock === 'object' ? next.lock : null,
+    // Deliberately NOT taken from the caller. A page reads the colony file once, at boot, so a
+    // tab opened before a passcode was set still believes there is none — and its next routine
+    // save (a moved zone, a settings slider) would write that belief back and delete the
+    // passcode with nobody having typed one. The lock changes through /api/lock and nowhere
+    // else; every other writer carries the value already on disk, untouched.
+    lock: keepLock,
     viewedAt: asObject(next.viewedAt),
     settings: next.settings && typeof next.settings === 'object' ? next.settings : null,
     updatedAt: Date.now(),
@@ -433,6 +440,34 @@ export async function apiMiddleware(req, res, next) {
       const dir = await resolveFolder(folder)
       if (!dir) return send(res, 200, { ok: false, error: 'That folder is not on this machine any more' })
       return send(res, 200, await readTodos(dir))
+    }
+
+    /**
+     * Set, change or remove the passcode over the off-the-map list.
+     *
+     * The passcode never leaves the browser, here either. The caller proves it knows the current
+     * one by sending back the hash it derives from it — a value it can only produce by holding
+     * the passcode — and the server compares that against what it stored. Replayable by anything
+     * that can already read the file, which is the same set of people who could delete the file,
+     * so it costs nothing that was not already spent.
+     *
+     * This route exists because the state PUT cannot be trusted with the field: a stale tab
+     * genuinely believes there is no lock, and a whole-file write from it was silently wiping one.
+     */
+    if (url.pathname === '/api/lock' && req.method === 'POST') {
+      const { prevHash, next } = await readJsonBody(req)
+      return serialise(async () => {
+        const current = await readState()
+        if (current.lock?.hash) {
+          const a = Buffer.from(String(current.lock.hash))
+          const b = Buffer.from(String(prevHash || ''))
+          const ok = a.length === b.length && timingSafeEqual(a, b)
+          if (!ok) return send(res, 200, { ok: false, error: 'That passcode is not right' })
+        }
+        const lock = next && typeof next === 'object' && next.salt && next.hash ? next : null
+        await writeState(current, lock)
+        return send(res, 200, { ok: true, locked: Boolean(lock) })
+      })
     }
 
     if (url.pathname === '/api/open' && req.method === 'POST') {

@@ -49,3 +49,6 @@ export async function checkLock(lock, passcode) {
 }
 
 export const isLocked = (lock) => Boolean(lock?.salt && lock?.hash)
+
+/** The hash this passcode produces for an existing lock — the proof sent when changing it. */
+export const deriveFor = (lock, passcode) => derive(passcode, lock.salt)

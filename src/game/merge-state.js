@@ -125,9 +125,11 @@ export function mergeState(base, local, remote) {
     plots: mergeMap(b.plots, l.plots, r.plots),
     seen: mergeMap(b.seen, l.seen, r.seen),
     hiddenProjects: mergeSet(b.hiddenProjects, l.hiddenProjects, r.hiddenProjects),
-    // Like `settings`, this is one value rather than a set: whoever set it last meant it, and
-    // half-merging two passcodes would produce one that opens nothing.
-    lock: l.lock !== undefined ? l.lock : r.lock ?? null,
+    // The server owns this field and ignores whatever a state save carries, so the only correct
+    // thing to merge is what the disk just told us. Taking the local value here is what let a
+    // tab that pre-dated the passcode delete it: its `lock` is a stale `null`, not `undefined`,
+    // so it beat the real one every time.
+    lock: r.lock ?? null,
     viewedAt: mergeMap(b.viewedAt, l.viewedAt, r.viewedAt),
     settings: l.settings && typeof l.settings === 'object' ? l.settings : r.settings ?? null,
   }
