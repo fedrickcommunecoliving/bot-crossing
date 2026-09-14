@@ -605,17 +605,32 @@ export class Hud {
           (r.done ? `<span class="done">${r.done} done</span>` : '')
         box.innerHTML = ''
         for (const item of open) {
-          const row = document.createElement('button')
-          row.type = 'button'
+          const where = `${item.file}${item.line ? `:${item.line}` : ''}`
+          const row = document.createElement('div')
           row.className = 'todo'
-          // The row says what it will do, because clicking a to-do could as easily mean "tick
-          // this off" — and this one opens a conversation instead.
-          row.title = `${item.file}${item.line ? `:${item.line}` : ''}\nClick to take this into the newest conversation here`
-          row.innerHTML =
+
+          // Two ways to take one item somewhere, because the app allows exactly one of them to
+          // arrive already typed, and that one costs you the conversation you were in.
+          const main = document.createElement('button')
+          main.type = 'button'
+          main.className = 'todo-main'
+          main.title = `${where}\nTake this to the newest conversation here — it opens, you press Ctrl+V`
+          main.innerHTML =
             '<i class="box"></i>' +
             `<span class="t">${escapeHtml(item.text)}</span>` +
             (item.section ? `<span class="sec">${escapeHtml(item.section)}</span>` : '')
-          row.addEventListener('click', () => this.actions.startTodo?.(item))
+          main.addEventListener('click', () => this.actions.startTodo?.(item))
+
+          const fresh = document.createElement('button')
+          fresh.type = 'button'
+          fresh.className = 'todo-fresh'
+          fresh.title = `${where}\nStart a NEW conversation with this already typed in — nothing to paste`
+          fresh.setAttribute('aria-label', 'Start a new conversation about this to-do')
+          fresh.innerHTML = ICON.plus
+
+          fresh.addEventListener('click', () => this.actions.startTodoFresh?.(item))
+
+          row.append(main, fresh)
           box.appendChild(row)
         }
         if (r.truncated) {

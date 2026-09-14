@@ -89,7 +89,7 @@ export async function saveState(state) {
 export const openThread = (thread) => post('/api/open', { harness: thread.harness, ref: thread.ref })
 
 /** A brand new thread in a repo, via that harness's own new-session deep link. */
-export const newSession = (folder, harness) => post('/api/new-session', { folder, harness })
+export const newSession = (folder, harness, prompt) => post('/api/new-session', { folder, harness, prompt })
 
 export const revealFolder = (folder) => post('/api/reveal', { folder })
 

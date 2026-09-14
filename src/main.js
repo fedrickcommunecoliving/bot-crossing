@@ -289,6 +289,38 @@ const actions = {
     )
   },
 
+  /**
+   * The same to-do, but into a brand new conversation with the text already typed.
+   *
+   * This is the only route that can pre-fill anything: the app takes `q` while it is opening a new
+   * session and discards it when the link names an existing one. So the choice is genuinely
+   * between landing in the current conversation and pasting, or landing in an empty one with
+   * nothing left to do but press Enter — which is why both exist rather than one being the
+   * obvious winner.
+   *
+   * Nothing is sent. The app has no path from a URL to a submit, so the text sits in the box
+   * until you read it and press Enter yourself.
+   */
+  startTodoFresh: async (item) => {
+    const name = selectedProject
+    const folder = name && pathForProject(name)
+    if (!folder || !item) return
+    const where = item.file ? `${item.file}${item.line ? ` line ${item.line}` : ''}` : 'TODO.md'
+    const prompt =
+      `From ${where} in this project, still open:\n\n` +
+      `${item.text}\n\n` +
+      `Read TODO.md and check the current state of the code before answering — this was written ` +
+      `down earlier and may already be done or may have moved. Tell me what is actually ` +
+      `outstanding and what you would do. Do not change anything yet.`
+    try {
+      await newSession(folder, harnessForProject(name), prompt)
+      hud.toast('New conversation — the to-do is already typed in, press Enter')
+      setTimeout(poll, 6000)
+    } catch (err) {
+      hud.toast(err.message || 'Could not start a conversation there', 'err')
+    }
+  },
+
   openThread: async () => {
     const thread = threads.find((t) => t.id === selectedId)
     if (!thread) return

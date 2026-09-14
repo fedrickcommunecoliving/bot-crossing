@@ -437,7 +437,7 @@ export async function apiMiddleware(req, res, next) {
     }
 
     if ((url.pathname === '/api/new-session' || url.pathname === '/api/reveal') && req.method === 'POST') {
-      const { folder, harness } = await readJsonBody(req)
+      const { folder, harness, prompt } = await readJsonBody(req)
       const dir = await resolveFolder(folder)
       if (!dir) return send(res, 400, { ok: false, error: 'That folder is not on this machine any more' })
 
@@ -445,7 +445,7 @@ export async function apiMiddleware(req, res, next) {
         launch(dir)
         return send(res, 200, { ok: true })
       }
-      const shown = await present(await harnessNewSession(harness || (await defaultHarness()), dir))
+      const shown = await present(await harnessNewSession(harness || (await defaultHarness()), dir, prompt))
       return send(res, shown.ok ? 200 : 400, shown)
     }
 

@@ -582,8 +582,21 @@ async function openThread(ref) {
  * "New Claude Code Session Here" quick action uses. Nothing is resumed and nothing is
  * written: the desktop app just opens an empty session with that folder as its workspace.
  */
-async function newSession(dir) {
-  const url = `claude://code/new?${new URLSearchParams({ folder: dir })}`
+/**
+ * `prompt` is typed into the new session's box, not sent. The desktop app accepts `q` only while
+ * it is opening a NEW session and discards it when the link names an existing one, which is the
+ * whole reason this is the only path that can pre-fill anything. It never submits: the app has no
+ * code path from a URL parameter to a send, and that is a good thing — nothing outside Claude Code
+ * should be able to make it act on your behalf.
+ *
+ * Capped well under the app's own 14336-character truncation, so a long backlog entry arrives
+ * whole rather than cut mid-sentence.
+ */
+async function newSession(dir, prompt) {
+  const params = { folder: dir }
+  const q = typeof prompt === 'string' ? prompt.trim() : ''
+  if (q) params.q = q.slice(0, 4000)
+  const url = `claude://code/new?${new URLSearchParams(params)}`
   let command
   if (process.platform === 'linux') {
     const bin = await cliBinary()
