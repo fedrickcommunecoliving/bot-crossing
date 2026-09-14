@@ -681,6 +681,11 @@ export class Hud {
       // Nowhere to go on either side — sit over the middle rather than off the edge.
       if (left < margin) left = Math.min(Math.max(margin, screen.x - size.w / 2), rightWall - size.w)
     }
+    // An astronaut can sit off the *left* of the window too — walked out of frame, or the
+    // camera panned past it — and the flip branch above only guards the right-hand case. The
+    // unflipped `screen.x + gap` is then negative and the card hangs off the edge with its
+    // text cut down the middle, which is exactly when you most want to read it.
+    left = Math.min(Math.max(margin, left), Math.max(margin, rightWall - size.w))
     const top = Math.min(Math.max(margin, screen.y - size.h / 2), window.innerHeight - margin - size.h)
 
     if (!this._cardOn) {
