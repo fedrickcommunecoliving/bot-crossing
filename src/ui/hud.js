@@ -609,6 +609,46 @@ export class Hud {
     // crowd the two that are always worth having, and "Viewed" on a thread that is not asking
     // for anything is a control with no effect.
     this.$('#btn-viewed').hidden = !thread.unread
+
+    this._showLastMessage(thread)
+  }
+
+  /**
+   * The last thing the thread said, under the status line.
+   *
+   * "Waiting on you" names a state; it does not say what is being waited for, and that was the
+   * one question the card could not answer without opening the harness. The text is fetched per
+   * selection, so a thread that has moved on shows its new message rather than a cached one.
+   *
+   * Selections change faster than a disk read returns — click along a row of astronauts and
+   * several of these are in flight at once — so each fetch carries the id it was asked for and
+   * a late reply for a thread you have already clicked away from is dropped rather than
+   * painted over the card you are actually looking at.
+   */
+  _showLastMessage(thread) {
+    const box = this.$('.thread-pop .last-msg')
+    const token = thread.id
+    this._msgToken = token
+    box.hidden = false
+    box.textContent = 'Reading…'
+    box.classList.add('muted')
+
+    const settle = (text, muted) => {
+      if (this._msgToken !== token) return
+      const card = this.$('.thread-pop')
+      if (!card.classList.contains('on')) return
+      box.textContent = text
+      box.classList.toggle('muted', muted)
+      // The card is placed against its measured size every frame, and it just changed.
+      this._cardSize = { w: card.offsetWidth, h: card.offsetHeight }
+    }
+
+    Promise.resolve(this.actions.threadMessage?.(thread.id) ?? { ok: false, error: '' })
+      .then((r) => {
+        if (r?.ok && r.text) settle(r.truncated ? `${r.text}…` : r.text, false)
+        else settle(r?.error || 'No message to show.', true)
+      })
+      .catch(() => settle('Could not read this thread.', true))
   }
 
   /**
@@ -975,6 +1015,7 @@ const TEMPLATE = `
     <button class="btn icon ghost" id="btn-deselect" title="Deselect (Esc)">${ICON.close}</button>
   </div>
   <div class="progress"><i></i></div>
+  <div class="last-msg" hidden></div>
   <div class="pair">
     <button class="btn primary" id="btn-open" title="Open this thread in the harness it came from (Enter)">${ICON.open} Open</button>
     <button class="btn" id="btn-viewed" title="Stop this thread asking for you until it moves on again (V)">${ICON.eye} Viewed</button>

@@ -7,6 +7,7 @@ import { openInTerminal, schemeHasHandler, schemeOf } from './lib/xdg.mjs'
 import {
   defaultHarness,
   harnessStatus,
+  lastMessage as harnessLastMessage,
   newSession as harnessNewSession,
   openThread as harnessOpenThread,
   scanThreads,
@@ -403,6 +404,17 @@ export async function apiMiddleware(req, res, next) {
         if (base && current.updatedAt !== base) return send(res, 409, current)
         return send(res, 200, await writeState(body))
       })
+    }
+
+    /**
+     * What a thread last said, for the selected card. Read on demand and never cached here:
+     * a thread that moves while its card is open should show the new message next time it is
+     * selected, not the one that was true when the page loaded.
+     */
+    if (url.pathname === '/api/thread-message' && req.method === 'POST') {
+      const { harness, ref } = await readJsonBody(req)
+      const result = await harnessLastMessage(harness, ref)
+      return send(res, 200, result)
     }
 
     if (url.pathname === '/api/open' && req.method === 'POST') {

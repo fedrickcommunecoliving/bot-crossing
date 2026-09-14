@@ -607,6 +607,30 @@ body {
   height: 14px;
 }
 
+/**
+ * What the thread last said. Capped and scrolled rather than allowed to grow: the card is
+ * positioned against its own measured height every frame, so a message left to run its full
+ * length would push the buttons off the bottom of the screen on a long wrap-up.
+ */
+.thread-pop .last-msg {
+  max-height: 190px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 7px;
+  padding: 8px 9px;
+}
+
+.thread-pop .last-msg.muted {
+  color: rgba(255, 255, 255, 0.45);
+  font-style: italic;
+}
+
 .thread-pop .pair {
   display: flex;
   gap: 6px;

@@ -118,3 +118,16 @@ const dispatch = (harnessId) => {
 export const openThread = async (harnessId, ref) => dispatch(harnessId).openThread(ref)
 
 export const newSession = async (harnessId, dir) => dispatch(harnessId).newSession(dir)
+
+/**
+ * Optional in the adapter interface: an adapter that cannot cheaply reach the end of a
+ * transcript says so here rather than being obliged to implement it. The card then shows
+ * nothing, which is what it showed before this existed.
+ */
+export const lastMessage = async (harnessId, ref) => {
+  const harness = dispatch(harnessId)
+  if (typeof harness.lastMessage !== 'function') {
+    return { ok: false, error: `${harness.name} cannot show a thread's last message.` }
+  }
+  return harness.lastMessage(ref)
+}

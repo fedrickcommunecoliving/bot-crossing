@@ -92,3 +92,10 @@ export const openThread = (thread) => post('/api/open', { harness: thread.harnes
 export const newSession = (folder, harness) => post('/api/new-session', { folder, harness })
 
 export const revealFolder = (folder) => post('/api/reveal', { folder })
+
+/**
+ * What a thread last said. Asked for only when a card opens, so the answer is current rather
+ * than whatever was true at the last poll.
+ */
+export const fetchThreadMessage = (thread) =>
+  post('/api/thread-message', { harness: thread.harness, ref: thread.ref })

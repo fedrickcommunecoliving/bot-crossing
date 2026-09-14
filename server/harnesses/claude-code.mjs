@@ -228,6 +228,68 @@ async function awaitingReply(file) {
   return false
 }
 
+/**
+ * The last thing the model actually said in a thread.
+ *
+ * A badge can say that a thread handed the turn back. It cannot say what it handed back, and
+ * "Waiting on you" without the sentence you are waiting on still means opening the harness to
+ * find out what that even was. This reads that sentence.
+ *
+ * Pulled when an astronaut is selected rather than during a scan. A scan fills a list, and a
+ * list is not where anyone reads prose — filling one for every thread would buy a single card's
+ * worth of text at the price of a tail read per thread, on every poll.
+ *
+ * The window is wider than `TAIL_BYTES` because a wrap-up at the end of a long turn runs to
+ * thousands of characters, and the tail has to clear whatever tool traffic trails it.
+ */
+const MESSAGE_TAIL_BYTES = 512 * 1024
+const MESSAGE_MAX_CHARS = 4000
+
+/** Every text block of one message, not just the first — a reply is routinely several. */
+function allText(content) {
+  if (typeof content === 'string') return content.trim()
+  if (!Array.isArray(content)) return ''
+  return content
+    .filter((part) => part && part.type === 'text' && typeof part.text === 'string')
+    .map((part) => part.text)
+    .join('\n')
+    .trim()
+}
+
+/** Where a CLI session's transcript sits, or null once Claude Code has cleaned it up. */
+async function transcriptPath(id) {
+  for (const projectDir of await listDirs(CLI_PROJECTS)) {
+    const file = path.join(projectDir, `${id}.jsonl`)
+    if (await exists(file)) return file
+  }
+  return null
+}
+
+async function lastMessage(ref) {
+  const id = ref?.cliSessionId
+  if (!isCliId(id)) {
+    return { ok: false, error: 'This thread has no transcript on this machine to read from.' }
+  }
+  const file = await transcriptPath(id)
+  if (!file) {
+    return { ok: false, error: 'Its transcript is gone — Claude Code deletes old ones on a timer.' }
+  }
+  let records
+  try {
+    records = jsonLines(await readTail(file, MESSAGE_TAIL_BYTES))
+  } catch {
+    return { ok: false, error: 'That transcript could not be read.' }
+  }
+  for (let i = records.length - 1; i >= 0; i--) {
+    const r = records[i]
+    if (r.type !== 'assistant' || !r.message) continue
+    const text = allText(r.message.content)
+    if (!text) continue
+    return { ok: true, text: text.slice(0, MESSAGE_MAX_CHARS), truncated: text.length > MESSAGE_MAX_CHARS }
+  }
+  return { ok: false, error: 'Nothing has been said in this thread yet.' }
+}
+
 /** Transcript metadata is expensive to parse, so keep it until the file changes. */
 const metaCache = new Map()
 async function transcriptMeta(entry) {
@@ -538,5 +600,6 @@ export default {
   scanThreads,
   openThread,
   newSession,
+  lastMessage,
   paths: { DESKTOP_SESSIONS, CLI_PROJECTS, CLI_LIVE },
 }

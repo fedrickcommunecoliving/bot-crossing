@@ -15,6 +15,7 @@ import {
   saveState,
   openThread,
   newSession,
+  fetchThreadMessage,
   revealFolder,
 } from './game/api.js'
 import { hideProject, hiddenCatalog, unhideProject } from './game/hidden-projects.js'
@@ -268,6 +269,14 @@ const actions = {
   progressFor: (id) => {
     const thread = threads.find((t) => t.id === id)
     return thread ? transcriptProgress(thread) : 0
+  },
+
+  // The card asks for this itself when it opens; a thread that is not on this scan any more
+  // has nothing to read, and saying so beats a request that cannot be answered.
+  threadMessage: (id) => {
+    const thread = threads.find((t) => t.id === id)
+    if (!thread) return Promise.resolve({ ok: false, error: 'That thread is no longer in the scan.' })
+    return fetchThreadMessage(thread)
   },
 }
 
