@@ -43,6 +43,8 @@ const ICON = {
   folder: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.4A1.4 1.4 0 0 1 4.4 6h4.2l2 2.5h7A1.4 1.4 0 0 1 19 9.9v7.7a1.4 1.4 0 0 1-1.4 1.4H4.4A1.4 1.4 0 0 1 3 17.6z"/></svg>`,
   copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>`,
   locate: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.6"/><path d="M12 1.8v2.6M12 19.6v2.6M1.8 12h2.6M19.6 12h2.6"/></svg>`,
+  locked: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/></svg>`,
+  unlocked: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.8a4 4 0 0 1 7.6-1.7"/></svg>`,
   orbit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4"/><ellipse cx="12" cy="12" rx="10.2" ry="4.6" transform="rotate(-24 12 12)"/><circle cx="21" cy="8.2" r="1.5" fill="currentColor" stroke="none"/></svg>`,
 }
 
@@ -368,6 +370,7 @@ export class Hud {
     on('#btn-copy-path', 'click', () => this.actions.copyProjectPath?.())
     on('#btn-hide-project', 'click', () => this.actions.hideProject?.())
     on('#btn-hidden-toggle', 'click', () => this.toggleHiddenList())
+    on('#btn-hidden-lock', 'click', () => this.toggleLock())
     on('#btn-locate', 'click', () => this.actions.focusProject?.(this.project?.name))
     on('#btn-close-project', 'click', () => this.actions.closeProject?.())
     on('.help', 'click', (e) => {
@@ -407,7 +410,14 @@ export class Hud {
       projects.map((p) => `${p.name}:${p.count}:${p.accent}:${p.urgent ? 1 : 0}`).join('|') +
       `~${activeName}~` +
       hidden.map((p) => `${p.name}:${p.count}`).join('|') +
-      `~${folded.length}`
+      `~${folded.length}` +
+      // The lock belongs in the signature because it changes what this draws. Without it,
+      // entering the passcode returns early on an unchanged list of repos and the names it was
+      // withholding are never drawn — the unlock works and looks like it failed.
+      `~${(() => {
+        const g = this.actions.lockState?.() || {}
+        return `${g.locked ? 1 : 0}${g.open ? 1 : 0}`
+      })()}`
     if (this._last.legend === signature) return
     this._last.legend = signature
 
@@ -435,7 +445,13 @@ export class Hud {
     block.hidden = hidden.length === 0 && folded.length === 0
     const hiddenWrap = this.$('.hidden-projects')
     hiddenWrap.innerHTML = ''
-    for (const p of hidden) {
+    // While the passcode stands, the names are not put in the page at all. `hidden` on the
+    // wrapper would keep them out of sight but leave them sitting in the document for anyone who
+    // opens the inspector — and the names are the private half of this. Nothing stops someone
+    // reading data/colony.json, but nothing should make it that much easier either.
+    const gate = this.actions.lockState?.() || {}
+    const sealed = gate.locked && !gate.open
+    for (const p of sealed ? [] : hidden) {
       const accent = PLOT_PALETTE[hashString(p.name) % PLOT_PALETTE.length]
       const row = document.createElement('div')
       row.className = 'repo hidden-repo'
@@ -448,13 +464,24 @@ export class Hud {
       show.className = 'btn ghost show-repo'
       show.title = `Show ${p.name} on the map again`
       show.textContent = 'Show'
-      show.addEventListener('click', () => this.actions.unhideProject?.(p.name))
+      show.addEventListener('click', () => {
+        const lock = this.actions.lockState?.() || {}
+        if (lock.locked && !lock.open) return this._askPasscode()
+        this.actions.unhideProject?.(p.name)
+      })
       row.appendChild(show)
       hiddenWrap.appendChild(row)
     }
 
     // The dormant fold gets one line rather than a row each: it is a setting, not a list of
     // decisions, and the thing worth offering is the way back rather than per-repo control.
+    if (sealed && hidden.length) {
+      const note = document.createElement('div')
+      note.className = 'repo hidden-repo folded-note'
+      note.innerHTML = `<span class="n">${hidden.length} repo${hidden.length === 1 ? '' : 's'} behind a passcode</span>`
+      hiddenWrap.appendChild(note)
+    }
+
     if (folded.length) {
       const n = folded.reduce((sum, p) => sum + p.count, 0)
       const row = document.createElement('div')
@@ -473,13 +500,116 @@ export class Hud {
     }
 
     const total = hidden.length + folded.length
-    this.$('#btn-hidden-toggle .label').textContent = `${total} off the map`
+    const lockNow = this.actions.lockState?.() || {}
+    this.$('#btn-hidden-toggle .label').textContent =
+      `${total} off the map` + (lockNow.locked ? (lockNow.open ? ' · unlocked' : ' · locked') : '')
+    this._syncLockButton()
     this._syncHiddenList()
   }
 
+  /**
+   * Opening the list is what the passcode guards, not just the Show buttons — the names of the
+   * repos you took off the map are the private part, and a list you can read is already open.
+   */
   toggleHiddenList() {
+    const lock = this.actions.lockState?.() || {}
+    if (!this.hiddenOpen && lock.locked && !lock.open) {
+      this._askPasscode()
+      return
+    }
     this.hiddenOpen = !this.hiddenOpen
     this._syncHiddenList()
+  }
+
+  /**
+   * One line under the heading rather than a modal: this is a curtain, and a dialog across the
+   * whole screen would claim to be something sturdier than it is.
+   */
+  _askPasscode() {
+    const wrap = this.$('.hidden-ask')
+    wrap.hidden = false
+    const input = wrap.querySelector('input')
+    const err = wrap.querySelector('.err')
+    err.textContent = ''
+    input.value = ''
+    input.focus()
+
+    const submit = async () => {
+      const r = await this.actions.tryUnlock?.(input.value)
+      if (r?.ok) {
+        wrap.hidden = true
+        input.value = ''
+        this.hiddenOpen = true
+        this._syncHiddenList()
+      } else {
+        err.textContent = r?.error || 'That passcode is not right'
+        input.select()
+      }
+    }
+    wrap.onsubmit = (e) => {
+      e.preventDefault()
+      submit()
+    }
+    wrap.querySelector('.cancel').onclick = () => {
+      wrap.hidden = true
+      input.value = ''
+    }
+  }
+
+  /**
+   * Set a passcode, or take one off. Removing needs the passcode as well — a lock anyone can
+   * remove without it is a label, not a lock.
+   */
+  toggleLock() {
+    const lock = this.actions.lockState?.() || {}
+    if (!lock.supported) {
+      this.toast('This browser cannot lock the list', 'err')
+      return
+    }
+    const wrap = this.$('.hidden-ask')
+    const input = wrap.querySelector('input')
+    const err = wrap.querySelector('.err')
+    const submitBtn = wrap.querySelector('button[type="submit"]')
+    wrap.hidden = false
+    err.textContent = ''
+    input.value = ''
+    input.placeholder = lock.locked ? 'Passcode, to remove the lock' : 'Choose a passcode'
+    submitBtn.textContent = lock.locked ? 'Remove lock' : 'Lock'
+    input.focus()
+
+    wrap.onsubmit = async (e) => {
+      e.preventDefault()
+      const r = lock.locked
+        ? await this.actions.clearLock?.(input.value)
+        : await this.actions.setLock?.(input.value)
+      if (r?.ok) {
+        wrap.hidden = true
+        input.value = ''
+        // A list left open while you were locking it should close behind you.
+        if (!lock.locked) {
+          this.hiddenOpen = false
+          this._syncHiddenList()
+        }
+        this._syncLockButton()
+      } else {
+        err.textContent = r?.error || 'That did not work'
+        input.select()
+      }
+    }
+    wrap.querySelector('.cancel').onclick = () => {
+      wrap.hidden = true
+      input.value = ''
+    }
+  }
+
+  _syncLockButton() {
+    const btn = this.$('#btn-hidden-lock')
+    if (!btn) return
+    const lock = this.actions.lockState?.() || {}
+    btn.hidden = !lock.supported
+    btn.innerHTML = lock.locked ? ICON.locked : ICON.unlocked
+    btn.title = lock.locked ? 'Remove the passcode from this list' : 'Ask for a passcode before this list opens'
+    btn.setAttribute('aria-label', btn.title)
   }
 
   _syncHiddenList() {
@@ -1043,7 +1173,14 @@ const TEMPLATE = `
         <button type="button" class="hidden-toggle" id="btn-hidden-toggle" aria-expanded="false">
           <span class="label">0 hidden</span>
         </button>
-        <div class="hidden-projects" hidden></div>
+        <button type="button" class="btn icon ghost hidden-lock" id="btn-hidden-lock"></button>
+        <form class="hidden-ask" hidden>
+        <input type="password" placeholder="Passcode" autocomplete="off" spellcheck="false" />
+        <button type="submit" class="btn">Unlock</button>
+        <button type="button" class="btn ghost cancel">Cancel</button>
+        <div class="err"></div>
+      </form>
+      <div class="hidden-projects" hidden></div>
       </div>
     </div>
 

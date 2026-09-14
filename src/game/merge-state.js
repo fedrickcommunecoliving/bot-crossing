@@ -125,6 +125,9 @@ export function mergeState(base, local, remote) {
     plots: mergeMap(b.plots, l.plots, r.plots),
     seen: mergeMap(b.seen, l.seen, r.seen),
     hiddenProjects: mergeSet(b.hiddenProjects, l.hiddenProjects, r.hiddenProjects),
+    // Like `settings`, this is one value rather than a set: whoever set it last meant it, and
+    // half-merging two passcodes would produce one that opens nothing.
+    lock: l.lock !== undefined ? l.lock : r.lock ?? null,
     viewedAt: mergeMap(b.viewedAt, l.viewedAt, r.viewedAt),
     settings: l.settings && typeof l.settings === 'object' ? l.settings : r.settings ?? null,
   }

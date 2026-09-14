@@ -20,6 +20,7 @@ import {
   revealFolder,
 } from './game/api.js'
 import { hideProject, hiddenCatalog, unhideProject } from './game/hidden-projects.js'
+import { canLock, checkLock, isLocked, makeLock } from './game/lock.js'
 
 /**
  * Boot and the outer game loop.
@@ -61,6 +62,8 @@ let selectedProject = null
 let hoverId = null
 let statusCursor = 0
 let pendingSave = 0
+/** Whether the passcode has been entered since this page loaded. Never persisted. */
+let unlockedThisSession = false
 const hoverGround = new THREE.Vector3()
 
 // ── actions the HUD can trigger ────────────────────────────────────────────────────────
@@ -200,6 +203,43 @@ const actions = {
     selectedProject = null
     applyThreads(threads)
     hud.toast(`Hidden ${name} — still in your harness, gone from the colony`)
+  },
+
+  /**
+   * The passcode over the off-the-map list.
+   *
+   * Unlocking lasts for this page, not for ever: reload and the curtain is closed again. That is
+   * the behaviour someone who locked a list wants, and it costs one entry a session.
+   */
+  lockState: () => ({ locked: isLocked(state.lock), open: unlockedThisSession, supported: canLock() }),
+
+  setLock: async (passcode) => {
+    if (!passcode) return { ok: false, error: 'Enter a passcode first' }
+    if (!canLock()) return { ok: false, error: 'This browser cannot lock the list' }
+    state.lock = await makeLock(passcode)
+    unlockedThisSession = true
+    queueSave()
+    hud.toast('Off-the-map list locked — it asks for the passcode after a reload')
+    return { ok: true }
+  },
+
+  /** Removing the lock needs the passcode too, or it is not a lock at all. */
+  clearLock: async (passcode) => {
+    if (!isLocked(state.lock)) return { ok: true }
+    if (!(await checkLock(state.lock, passcode))) return { ok: false, error: 'That passcode is not right' }
+    state.lock = null
+    unlockedThisSession = true
+    queueSave()
+    hud.toast('Passcode removed')
+    return { ok: true }
+  },
+
+  tryUnlock: async (passcode) => {
+    if (!isLocked(state.lock)) return { ok: true }
+    if (!(await checkLock(state.lock, passcode))) return { ok: false, error: 'That passcode is not right' }
+    unlockedThisSession = true
+    syncProject()
+    return { ok: true }
   },
 
   unhideProject: (name) => {

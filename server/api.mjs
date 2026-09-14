@@ -57,6 +57,7 @@ const emptyState = () => ({
   plots: {},
   seen: {},
   hiddenProjects: [],
+  lock: null,
   viewedAt: {},
   settings: null,
   updatedAt: 0,
@@ -76,6 +77,9 @@ async function readState() {
       plots: asObject(raw.plots),
       seen: asObject(raw.seen),
       hiddenProjects: asArray(raw.hiddenProjects).map(String).filter(Boolean),
+      // A passcode over the hidden list. Only ever a salt and a PBKDF2 hash — the passcode itself
+      // is never sent here and never stored.
+      lock: raw.lock && typeof raw.lock === 'object' ? raw.lock : null,
       viewedAt: asObject(raw.viewedAt),
       settings: raw.settings && typeof raw.settings === 'object' ? raw.settings : null,
       updatedAt: Number(raw.updatedAt) || 0,
@@ -111,6 +115,7 @@ async function writeState(next) {
     plots: asObject(next.plots),
     seen: asObject(next.seen),
     hiddenProjects: asArray(next.hiddenProjects).map(String).filter(Boolean),
+    lock: next.lock && typeof next.lock === 'object' ? next.lock : null,
     viewedAt: asObject(next.viewedAt),
     settings: next.settings && typeof next.settings === 'object' ? next.settings : null,
     updatedAt: Date.now(),
