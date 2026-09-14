@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { readTodos } from './lib/todos.mjs'
 import { openInTerminal, schemeHasHandler, schemeOf } from './lib/xdg.mjs'
 import {
   defaultHarness,
@@ -415,6 +416,18 @@ export async function apiMiddleware(req, res, next) {
       const { harness, ref } = await readJsonBody(req)
       const result = await harnessLastMessage(harness, ref)
       return send(res, 200, result)
+    }
+
+    /**
+     * The repo's own open work, read from its `TODO.md`. On demand like the thread message, and
+     * for the same reason: a scan of every project's files on every poll would cost far more than
+     * the panel it fills, which only one zone shows at a time.
+     */
+    if (url.pathname === '/api/project-todos' && req.method === 'POST') {
+      const { folder } = await readJsonBody(req)
+      const dir = await resolveFolder(folder)
+      if (!dir) return send(res, 200, { ok: false, error: 'That folder is not on this machine any more' })
+      return send(res, 200, await readTodos(dir))
     }
 
     if (url.pathname === '/api/open' && req.method === 'POST') {

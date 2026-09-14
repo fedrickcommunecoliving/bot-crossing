@@ -15,6 +15,7 @@ import {
   saveState,
   openThread,
   newSession,
+  fetchProjectTodos,
   fetchThreadMessage,
   revealFolder,
 } from './game/api.js'
@@ -270,6 +271,9 @@ const actions = {
     const thread = threads.find((t) => t.id === id)
     return thread ? transcriptProgress(thread) : 0
   },
+
+  // The zone panel asks for this itself when it opens, keyed on the folder.
+  projectTodos: (folder) => fetchProjectTodos(folder),
 
   // The card asks for this itself when it opens; a thread that is not on this scan any more
   // has nothing to read, and saying so beats a request that cannot be answered.

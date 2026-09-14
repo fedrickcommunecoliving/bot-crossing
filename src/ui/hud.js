@@ -565,6 +565,63 @@ export class Hud {
     }
     list.scrollTop = scroll
     if (!project.selectedId) this._scrolledTo = null
+
+    this._showTodos(project)
+  }
+
+  /**
+   * The repo's own open work, from its `TODO.md`.
+   *
+   * A zone with no astronaut on it reads as finished, and for most repos most of the time that is
+   * a lie — the conversations ended, the work did not. This is the half of a project's state that
+   * was never on the map.
+   *
+   * Keyed on the folder rather than the project name, and skipped when the folder has not changed,
+   * because `setProject` re-runs on every poll that moves a timestamp and re-reading a 137 KB
+   * backlog fifteen seconds apart would be work nobody asked for. Selections race exactly as they
+   * do on the thread card, so a late answer for a repo you have clicked away from is dropped.
+   */
+  _showTodos(project) {
+    const head = this.$('.side .todos-head')
+    const box = this.$('.side .todos')
+    const folder = project.path || ''
+    if (this._todoFolder === folder) return
+    this._todoFolder = folder
+
+    head.hidden = true
+    box.hidden = true
+    if (!folder) return
+
+    Promise.resolve(this.actions.projectTodos?.(folder) ?? { ok: false })
+      .then((r) => {
+        if (this._todoFolder !== folder) return
+        const open = r?.ok ? r.open || [] : []
+        if (!open.length) return
+        head.hidden = false
+        box.hidden = false
+        const total = r.openTotal || open.length
+        head.innerHTML =
+          `<span>${total} to-do${total === 1 ? '' : 's'}</span>` +
+          (r.done ? `<span class="done">${r.done} done</span>` : '')
+        box.innerHTML = ''
+        for (const item of open) {
+          const row = document.createElement('div')
+          row.className = 'todo'
+          row.title = `${item.file}${item.line ? `:${item.line}` : ''}`
+          row.innerHTML =
+            '<i class="box"></i>' +
+            `<span class="t">${escapeHtml(item.text)}</span>` +
+            (item.section ? `<span class="sec">${escapeHtml(item.section)}</span>` : '')
+          box.appendChild(row)
+        }
+        if (r.truncated) {
+          const more = document.createElement('div')
+          more.className = 'todo more'
+          more.textContent = `…and ${total - open.length} more in ${r.files.join(', ')}`
+          box.appendChild(more)
+        }
+      })
+      .catch(() => {})
   }
 
   /**
@@ -989,6 +1046,8 @@ const TEMPLATE = `
         </div>
         <button class="btn" id="btn-hide-project" title="Hide this repo from the colony — does not archive its threads">${ICON.eyeOff} Hide from colony</button>
       </div>
+      <div class="todos-head" hidden></div>
+      <div class="todos" hidden></div>
       <div class="threads-head"></div>
       <div class="threads"></div>
     </div>

@@ -99,3 +99,9 @@ export const revealFolder = (folder) => post('/api/reveal', { folder })
  */
 export const fetchThreadMessage = (thread) =>
   post('/api/thread-message', { harness: thread.harness, ref: thread.ref })
+
+/**
+ * A repo's open `TODO.md` items. Asked for when a zone is opened, not during a poll — the
+ * backlog files are large and only one zone is ever on screen.
+ */
+export const fetchProjectTodos = (folder) => post('/api/project-todos', { folder })
