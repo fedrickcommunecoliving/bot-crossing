@@ -264,9 +264,9 @@ const actions = {
     const text =
       `From ${where} in this project, still open:\n\n` +
       `${item.text}\n\n` +
-      `Check TODO.md and the current state of the code yourself before answering — this was ` +
-      `written down earlier and may already be done or may have moved. Tell me what is actually ` +
-      `outstanding and what you would do. Do not change anything yet.`
+      `Read HANDOFF.md and TODO.md, then check the current state of the code yourself before ` +
+      `answering — this was written down earlier and may already be done or may have moved. Tell ` +
+      `me what is actually outstanding and what you would do. Do not change anything yet.`
 
     const copying = navigator.clipboard
       ? navigator.clipboard.writeText(text).then(
@@ -320,9 +320,11 @@ const actions = {
     const prompt =
       `From ${where} in this project, still open:\n\n` +
       `${item.text}\n\n` +
-      `Read TODO.md and check the current state of the code before answering — this was written ` +
-      `down earlier and may already be done or may have moved. Tell me what is actually ` +
-      `outstanding and what you would do. Do not change anything yet.`
+      `You are new to this conversation, so start by reading HANDOFF.md and TODO.md in this ` +
+      `folder — they carry where the project stands and what is outstanding. Then check the ` +
+      `current state of the code: this was written down earlier and may already be done or may ` +
+      `have moved. Tell me what is actually outstanding and what you would do. Do not change ` +
+      `anything yet.`
     try {
       await newSession(folder, harnessForProject(name), prompt)
       hud.toast('New conversation — the to-do is already typed in, press Enter')
