@@ -310,7 +310,7 @@ async function transcriptMeta(entry) {
  * processes that have exited, so every pid is probed before it counts.
  */
 async function scanLiveSessions() {
-  const live = new Set()
+  const live = new Map()
   for (const file of await listFiles(CLI_LIVE, (n) => n.endsWith('.json'))) {
     let record
     try {
@@ -321,7 +321,11 @@ async function scanLiveSessions() {
     if (!record.sessionId || !record.pid) continue
     try {
       process.kill(record.pid, 0) // signal 0 only tests for existence
-      live.add(record.sessionId)
+      // Claude Code writes what it is doing right here, and keeps it current: `busy` while it
+      // works, `idle` the moment it hands the turn back. Taking its word for it is the whole
+      // point — the alternative is inferring the same fact from the shape of its files, which is
+      // guesswork against an implementation detail that is free to change.
+      live.set(record.sessionId, { busy: record.status === 'busy' })
     } catch {
       /* process is gone */
     }
@@ -373,6 +377,7 @@ function mergeThread(existing, next) {
     lastFocusedAt: Math.max(existing.lastFocusedAt || 0, next.lastFocusedAt || 0),
     hasError: existing.hasError || next.hasError,
     hasLiveProcess: existing.hasLiveProcess || next.hasLiveProcess,
+    liveBusy: existing.liveBusy || next.liveBusy,
     starred: existing.starred || next.starred,
     routine: existing.routine || next.routine,
     prState: existing.prState || next.prState,
@@ -390,7 +395,7 @@ function mergeThread(existing, next) {
 function toThread(t) {
   const {
     desktopSessionId, desktopSessionIds, cliSessionId, bridgeSessionId,
-    titled, hasLiveProcess, transcriptFile, recordActivityAt, ...rest
+    titled, hasLiveProcess, liveBusy, transcriptFile, recordActivityAt, ...rest
   } = t
   return {
     ...rest,
@@ -453,6 +458,7 @@ async function scanThreads() {
       recordActivityAt: num(s.lastActivityAt) || num(s.lastFocusedAt) || num(s.createdAt) || 0,
       lastFocusedAt: num(s.lastFocusedAt),
       hasLiveProcess: live.has(cliSessionId),
+      liveBusy: live.get(cliSessionId)?.busy === true,
       hasError: Boolean(s.error),
       starred: s.isStarred === true,
       routine: s.scheduledTaskId || '',
@@ -491,6 +497,7 @@ async function scanThreads() {
       lastActivityAt: entry.mtime,
       lastFocusedAt: 0,
       hasLiveProcess: live.has(id),
+      liveBusy: live.get(id)?.busy === true,
       hasError: false,
       starred: false,
       routine: '',
@@ -534,10 +541,24 @@ async function scanThreads() {
     const fresh = now - thread.lastActivityAt < ACTIVE_WINDOW_MS
     const waiting =
       thread.hasLiveProcess && fresh && thread.transcriptFile ? await awaitingReply(thread.transcriptFile) : false
-    thread.running = thread.hasLiveProcess && fresh && !waiting
+    /**
+     * A session that started work in the background — a workflow, a fleet of sub-agents — ends its
+     * own turn the moment the tool returns, so its transcript reads as "handed back to you" while
+     * the work is still going. Judged on the transcript alone that thread shows a blue `?` over
+     * the busiest repo on the machine.
+     *
+     * Claude Code already answers this itself, in the session record it keeps for every live
+     * process: `busy` while it is working, `idle` when it is not. That is not an inference from
+     * file timestamps — it is the process saying what it is doing.
+     *
+     * Not gated on `fresh`. That window is measured against the main transcript, which is exactly
+     * what goes quiet during a long background run — the case this exists for.
+     */
+    thread.running = thread.hasLiveProcess && (thread.liveBusy || (fresh && !waiting))
     // A thread that handed the turn back wants you, whether or not the desktop app has ever seen
-    // it — the only way a terminal-only thread can ask for anything at all.
-    if (waiting) thread.unread = true
+    // it — the only way a terminal-only thread can ask for anything at all. A busy session has
+    // not handed anything back, so it is not asking yet.
+    if (waiting && !thread.liveBusy) thread.unread = true
   }
   return threads.map(toThread)
 }
