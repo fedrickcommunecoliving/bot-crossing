@@ -555,10 +555,23 @@ async function scanThreads() {
      * what goes quiet during a long background run — the case this exists for.
      */
     thread.running = thread.hasLiveProcess && (thread.liveBusy || (fresh && !waiting))
-    // A thread that handed the turn back wants you, whether or not the desktop app has ever seen
-    // it — the only way a terminal-only thread can ask for anything at all. A busy session has
-    // not handed anything back, so it is not asking yet.
-    if (waiting && !thread.liveBusy) thread.unread = true
+    /**
+     * A thread that handed the turn back wants you, whether or not the desktop app has ever seen
+     * it — the only way a terminal-only thread can ask for anything at all. A busy session has
+     * not handed anything back, so it is not asking yet.
+     *
+     * But not when the app can already see you read it. This used to overrule the focus record
+     * outright, so a thread you opened and read one minute ago kept its `?` up for as long as its
+     * process stayed alive — and the Viewed button could not clear it either, because the next
+     * scan simply set it again. The badge stopped meaning "this wants you" and started meaning
+     * "this is the last thing that spoke", which is the fastest way to teach someone to ignore it.
+     *
+     * A desktop thread focused at or after its last message has been read, and the flag belongs
+     * to the harness's own record. A terminal-only thread has `lastFocusedAt` of 0 and is
+     * unaffected, which is the case this override existed for.
+     */
+    const readSinceItSpoke = (thread.lastFocusedAt || 0) >= thread.lastActivityAt
+    if (waiting && !thread.liveBusy && !readSinceItSpoke) thread.unread = true
   }
   return threads.map(toThread)
 }
