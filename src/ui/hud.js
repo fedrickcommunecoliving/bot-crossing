@@ -605,13 +605,17 @@ export class Hud {
           (r.done ? `<span class="done">${r.done} done</span>` : '')
         box.innerHTML = ''
         for (const item of open) {
-          const row = document.createElement('div')
+          const row = document.createElement('button')
+          row.type = 'button'
           row.className = 'todo'
-          row.title = `${item.file}${item.line ? `:${item.line}` : ''}`
+          // The row says what it will do, because clicking a to-do could as easily mean "tick
+          // this off" — and this one opens a conversation instead.
+          row.title = `${item.file}${item.line ? `:${item.line}` : ''}\nClick to take this into the newest conversation here`
           row.innerHTML =
             '<i class="box"></i>' +
             `<span class="t">${escapeHtml(item.text)}</span>` +
             (item.section ? `<span class="sec">${escapeHtml(item.section)}</span>` : '')
+          row.addEventListener('click', () => this.actions.startTodo?.(item))
           box.appendChild(row)
         }
         if (r.truncated) {

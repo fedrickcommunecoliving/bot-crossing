@@ -1093,6 +1093,27 @@ body {
   background: rgba(255, 255, 255, 0.03);
 }
 
+/* A row is a button now, so it has to lose the browser's idea of one and gain a target's. */
+.side button.todo {
+  width: 100%;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.side button.todo:hover,
+.side button.todo:focus-visible {
+  background: rgba(224, 163, 58, 0.14);
+  color: #fff;
+}
+
+.side button.todo:hover .box,
+.side button.todo:focus-visible .box {
+  opacity: 1;
+}
+
 .side .todo .box {
   width: 11px;
   height: 11px;

@@ -224,6 +224,71 @@ const actions = {
     }
   },
 
+  /**
+   * Take one open `TODO.md` line into the newest conversation in its repo.
+   *
+   * The item was written down by an older thread and the thread that will fix it is a different,
+   * newer one — that gap is the whole reason the file exists. So this does not reopen the thread
+   * that logged it; it opens whichever conversation in that repo is current, which is where the
+   * work is actually going to happen.
+   *
+   * The text is copied rather than typed in for you, and that is a hard limit rather than a
+   * shortcut: the desktop app accepts a prompt from a deep link only when it is opening a NEW
+   * session, and deliberately discards it when the link names an existing one. Between landing in
+   * the right conversation with a paste, and landing in an empty one with the text already there,
+   * the paste is the better trade — the current thread knows the project.
+   *
+   * The clipboard write goes first and is not awaited before it starts, because it needs the
+   * click's user activation and that lapses across an await on the network.
+   */
+  startTodo: (item) => {
+    const name = selectedProject
+    if (!name || !item) return
+    const pool = threads
+      .filter((t) => t.project === name && !t.archived)
+      .sort((a, b) => (b.lastActivityAt || 0) - (a.lastActivityAt || 0))
+    const newest = pool[0]
+
+    const where = item.file ? `${item.file}${item.line ? ` line ${item.line}` : ''}` : 'TODO.md'
+    const text =
+      `From ${where} in this project, still open:\n\n` +
+      `${item.text}\n\n` +
+      `Check TODO.md and the current state of the code yourself before answering — this was ` +
+      `written down earlier and may already be done or may have moved. Tell me what is actually ` +
+      `outstanding and what you would do. Do not change anything yet.`
+
+    const copying = navigator.clipboard
+      ? navigator.clipboard.writeText(text).then(
+          () => true,
+          () => copyFallback(text)
+        )
+      : Promise.resolve(copyFallback(text))
+
+    if (!newest) {
+      copying.then((ok) =>
+        hud.toast(
+          ok ? 'To-do copied — no conversation open in this repo yet, start one' : 'Could not reach the clipboard',
+          ok ? '' : 'err'
+        )
+      )
+      return
+    }
+
+    Promise.all([copying, openThread(newest)]).then(
+      ([ok]) => {
+        colony.astronauts.celebrate(newest.id)
+        hud.toast(
+          ok
+            ? `Opened ${newest.title.slice(0, 28)} — press Ctrl+V to paste the to-do`
+            : `Opened ${newest.title.slice(0, 28)} — but the clipboard was blocked`,
+          ok ? '' : 'err'
+        )
+        setTimeout(poll, 1800)
+      },
+      (err) => hud.toast(err.message || 'Could not open that thread', 'err')
+    )
+  },
+
   openThread: async () => {
     const thread = threads.find((t) => t.id === selectedId)
     if (!thread) return
